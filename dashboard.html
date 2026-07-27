@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LeihouOffer · 申请进度看板</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Noto+Sans+SC:wght@400;500;700;900&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --ink:#0C0C10; --paper:#F7F4EC; --paper-2:#FFFFFF;
+    --pink:#FF3E7B; --pink-soft:#FFD8E6;
+    --blue:#3457FF; --blue-soft:#DCE3FF;
+    --lime:#CBFF3D; --lime-soft:#EEFFC2;
+    --purple:#8B5CFF; --purple-soft:#E8DEFF;
+    --yellow:#FFD23F;
+    --muted:#57544B;
+    --border:3px solid var(--ink);
+    --shadow:6px 6px 0 var(--ink);
+    --shadow-sm:4px 4px 0 var(--ink);
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    background:var(--paper); color:var(--ink);
+    font-family:'Noto Sans SC','Manrope',sans-serif; min-height:100vh;
+  }
+  h1,h2,h3{font-family:'Noto Sans SC','Space Grotesk',sans-serif; font-weight:900;}
+  button{font-family:inherit; cursor:pointer;}
+  input,select,textarea{font-family:inherit;}
+  .hidden{display:none !important;}
+
+  /* ---------- NAV ---------- */
+  .nav{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:16px 28px; background:var(--paper-2); border-bottom:var(--border);
+  }
+  .brand{display:flex; align-items:center; gap:10px;}
+  .brand .mark{width:32px; height:32px; background:var(--ink); border-radius:50%; color:var(--lime); display:flex; align-items:center; justify-content:center; font-weight:900; font-family:'Space Grotesk',sans-serif;}
+  .brand .cn{font-weight:900; font-size:1.05rem;}
+  .role-badge{font-size:.76rem; font-weight:800; padding:5px 12px; border-radius:100px; border:2px solid var(--ink); margin-left:10px;}
+  .nav-right{display:flex; align-items:center; gap:14px;}
+  .nav-name{font-size:.9rem; font-weight:700; color:var(--muted);}
+  .btn{font-weight:800; font-size:.9rem; padding:10px 20px; border-radius:100px; border:var(--border); box-shadow:var(--shadow-sm); transition:transform .15s, box-shadow .15s; background:var(--paper-2);}
+  .btn:hover{transform:translate(-2px,-2px); box-shadow:6px 6px 0 var(--ink);}
+  .btn.dark{background:var(--ink); color:var(--paper);}
+  .btn.small{padding:7px 14px; font-size:.82rem; box-shadow:none; border-width:2px;}
+  .btn.small:hover{transform:none; box-shadow:none; background:var(--yellow);}
+
+  /* ---------- AUTH SCREEN ---------- */
+  .auth-wrap{min-height:calc(100vh - 70px); display:flex; align-items:center; justify-content:center; padding:24px;}
+  .auth-card{
+    width:100%; max-width:420px; background:var(--paper-2); border:var(--border);
+    border-radius:24px; box-shadow:var(--shadow); padding:38px;
+  }
+  .auth-card h2{font-size:1.5rem; margin-bottom:8px;}
+  .auth-card p{color:var(--muted); font-weight:600; font-size:.9rem; margin-bottom:24px;}
+  .field{display:flex; flex-direction:column; gap:6px; margin-bottom:16px;}
+  .field label{font-size:.82rem; font-weight:700;}
+  .field input, .field select, .field textarea{
+    padding:12px 14px; border-radius:12px; border:2.5px solid var(--ink); background:var(--paper);
+    font-size:.94rem; outline:none;
+  }
+  .field input:focus, .field select:focus, .field textarea:focus{box-shadow:3px 3px 0 var(--ink);}
+  .field textarea{resize:vertical; min-height:60px;}
+  .full-btn{width:100%; justify-content:center; display:flex; align-items:center; gap:8px;}
+  .auth-msg{font-size:.85rem; font-weight:600; margin-top:14px; padding:10px 14px; border-radius:10px;}
+  .auth-msg.ok{background:var(--lime-soft); border:2px solid var(--ink);}
+  .auth-msg.err{background:var(--pink-soft); border:2px solid var(--ink);}
+
+  /* ---------- MAIN ---------- */
+  main{padding:32px 28px; max-width:1400px; margin:0 auto;}
+  .board-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:24px; flex-wrap:wrap; gap:12px;}
+  .board-head h2{font-size:1.5rem;}
+
+  /* ---------- STUDENT KANBAN ---------- */
+  .kanban{display:flex; gap:18px; overflow-x:auto; padding-bottom:20px;}
+  .kcol{flex:0 0 260px; background:var(--paper-2); border:var(--border); border-radius:18px; padding:16px; box-shadow:var(--shadow-sm);}
+  .kcol-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;}
+  .kcol-head h3{font-size:1rem;}
+  .kcol-count{font-size:.76rem; font-weight:800; background:var(--ink); color:var(--paper); padding:2px 9px; border-radius:100px;}
+  .kcard{
+    background:var(--paper); border:2px solid var(--ink); border-radius:12px; padding:12px 14px; margin-bottom:10px;
+    cursor:pointer; transition:transform .15s;
+  }
+  .kcard:hover{transform:translateY(-2px);}
+  .kcard .company{font-weight:800; font-size:.92rem;}
+  .kcard .position{font-size:.8rem; color:var(--muted); font-weight:600; margin-top:2px;}
+  .kcard .meta{display:flex; gap:6px; margin-top:8px; flex-wrap:wrap;}
+  .kcard .tag{font-size:.68rem; font-weight:700; padding:3px 8px; border-radius:100px; border:1.5px solid var(--ink);}
+  .tag.overdue{background:var(--pink-soft);}
+  .add-card{
+    width:100%; border:2px dashed var(--ink); border-radius:12px; padding:10px; background:transparent;
+    font-weight:700; font-size:.85rem; color:var(--muted); transition:background .15s;
+  }
+  .add-card:hover{background:var(--lime-soft);}
+
+  /* ---------- MENTOR TABLE ---------- */
+  .filters{display:flex; gap:10px; margin-bottom:20px; flex-wrap:wrap;}
+  .filters select, .filters input{
+    padding:9px 14px; border-radius:100px; border:2px solid var(--ink); background:var(--paper-2); font-size:.86rem; font-weight:600;
+  }
+  .table-wrap{overflow-x:auto; border:var(--border); border-radius:18px; box-shadow:var(--shadow-sm); background:var(--paper-2);}
+  table{width:100%; border-collapse:collapse; font-size:.86rem;}
+  thead th{text-align:left; padding:14px 16px; background:var(--ink); color:var(--paper); font-weight:700; white-space:nowrap;}
+  tbody td{padding:12px 16px; border-top:2px solid var(--paper-2); border-bottom:1px dashed #ddd; vertical-align:top;}
+  tbody tr:hover{background:var(--lime-soft);}
+  td input, td select, td textarea{
+    padding:6px 8px; border-radius:8px; border:1.5px solid var(--ink); background:var(--paper); font-size:.82rem; width:100%; min-width:100px;
+  }
+  .stage-pill{font-size:.74rem; font-weight:800; padding:4px 10px; border-radius:100px; border:2px solid var(--ink); display:inline-block;}
+
+  /* ---------- MODAL ---------- */
+  .modal-overlay{
+    position:fixed; inset:0; background:rgba(12,12,16,.55); display:none; align-items:center; justify-content:center; z-index:1000; padding:20px;
+  }
+  .modal-overlay.open{display:flex;}
+  .modal-card{width:100%; max-width:480px; max-height:90vh; overflow-y:auto; background:var(--paper-2); border:var(--border); border-radius:22px; box-shadow:var(--shadow); padding:32px; position:relative;}
+  .modal-close{position:absolute; top:16px; right:16px; width:32px; height:32px; border-radius:50%; background:var(--paper); border:2px solid var(--ink); font-weight:700;}
+  .modal-card h3{font-size:1.2rem; margin-bottom:20px; padding-right:32px;}
+  .modal-actions{display:flex; gap:10px; margin-top:20px;}
+  .modal-actions .btn{flex:1; justify-content:center; display:flex; align-items:center;}
+  .danger{background:var(--pink-soft);}
+
+  @media (max-width:700px){
+    .nav{padding:14px 16px;} main{padding:20px 14px;}
+    .kcol{flex:0 0 240px;}
+  }
+</style>
+</head>
+<body>
+
+<div class="nav">
+  <div class="brand"><span class="mark">L</span><span class="cn">LeihouOffer 申请看板</span><span class="role-badge hidden" id="roleBadge"></span></div>
+  <div class="nav-right">
+    <span class="nav-name hidden" id="navName"></span>
+    <button class="btn small hidden" id="logoutBtn">退出登录</button>
+  </div>
+</div>
+
+<!-- ============ AUTH SCREEN ============ -->
+<div class="auth-wrap" id="authView">
+  <div class="auth-card">
+    <h2>登录申请看板</h2>
+    <p>输入邮箱，我们会发一个登录链接，不用记密码</p>
+    <div class="field">
+      <label>邮箱</label>
+      <input type="email" id="emailInput" placeholder="you@example.com">
+    </div>
+    <button class="btn dark full-btn" id="sendLinkBtn">发送登录链接 →</button>
+    <div id="authMsg"></div>
+  </div>
+</div>
+
+<!-- ============ PROFILE SETUP (first login) ============ -->
+<div class="auth-wrap hidden" id="profileView">
+  <div class="auth-card">
+    <h2>完善一下资料</h2>
+    <p>第一次登录，填一下基本信息</p>
+    <div class="field"><label>姓名</label><input type="text" id="pfName"></div>
+    <div class="field"><label>就读学校</label><input type="text" id="pfSchool"></div>
+    <div class="field"><label>专业</label><input type="text" id="pfMajor"></div>
+    <button class="btn dark full-btn" id="saveProfileBtn">保存，进入看板 →</button>
+    <div id="profileMsg"></div>
+  </div>
+</div>
+
+<!-- ============ MAIN ============ -->
+<main class="hidden" id="mainView">
+
+  <!-- Student Kanban -->
+  <div id="studentView" class="hidden">
+    <div class="board-head">
+      <h2>我的申请进度</h2>
+      <button class="btn dark" id="addAppBtn">+ 新增一条申请</button>
+    </div>
+    <div class="kanban" id="kanban"></div>
+  </div>
+
+  <!-- Mentor Table -->
+  <div id="mentorView" class="hidden">
+    <div class="board-head"><h2>全部学生申请概览</h2></div>
+    <div class="filters">
+      <select id="filterStudent"><option value="">全部学生</option></select>
+      <select id="filterStage">
+        <option value="">全部阶段</option>
+        <option>投递</option><option>网测</option><option>VI</option><option>AC</option>
+        <option>终面</option><option>Offer</option><option>被拒</option>
+      </select>
+      <input type="text" id="filterCompany" placeholder="搜公司名">
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>学生</th><th>学校</th><th>公司</th><th>岗位</th><th>阶段</th>
+            <th>截止日期</th><th>对应导师</th><th>下一步行动</th><th>行动日期</th><th>备注</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="mentorTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+</main>
+
+<!-- ============ APPLICATION MODAL ============ -->
+<div class="modal-overlay" id="appModal">
+  <div class="modal-card">
+    <button class="modal-close" id="appModalClose">✕</button>
+    <h3 id="appModalTitle">新增申请</h3>
+    <div class="field"><label>公司 *</label><input type="text" id="fCompany"></div>
+    <div class="field"><label>岗位 *</label><input type="text" id="fPosition"></div>
+    <div class="field"><label>阶段</label>
+      <select id="fStage">
+        <option>投递</option><option>网测</option><option>VI</option><option>AC</option>
+        <option>终面</option><option>Offer</option><option>被拒</option>
+      </select>
+    </div>
+    <div class="field"><label>截止日期</label><input type="date" id="fDeadline"></div>
+    <div class="field"><label>下一步行动</label><input type="text" id="fNextAction" placeholder="例如：准备VI"></div>
+    <div class="field"><label>行动日期</label><input type="date" id="fNextDate"></div>
+    <div class="field"><label>备注</label><textarea id="fNotes"></textarea></div>
+    <div class="modal-actions">
+      <button class="btn dark" id="fSaveBtn">保存</button>
+      <button class="btn danger hidden" id="fDeleteBtn">删除</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // TODO: 换成你Supabase项目的值（和网页表单那个是同一个项目）
+  const SUPABASE_URL = 'https://ifysvokoehjswpvoybpk.supabase.co';
+  const SUPABASE_ANON_KEY = 'sb_publishable_PUfj4tIICm7tZZylDwl1hA_3IhccXn5';
+  const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  const STAGES = ['投递','网测','VI','AC','终面','Offer','被拒'];
+
+  let currentUser = null;
+  let currentProfile = null;
+  let editingId = null;
+
+  const $ = (id) => document.getElementById(id);
+
+  // ---------- Auth ----------
+  $('sendLinkBtn').addEventListener('click', async ()=>{
+    const email = $('emailInput').value.trim();
+    const msg = $('authMsg');
+    if(!email){ msg.innerHTML = '<div class="auth-msg err">请输入邮箱</div>'; return; }
+    const { error } = await sb.auth.signInWithOtp({ email, options:{ emailRedirectTo: window.location.href } });
+    msg.innerHTML = error
+      ? `<div class="auth-msg err">发送失败：${error.message}</div>`
+      : `<div class="auth-msg ok">登录链接已发送，去邮箱里点一下（可能在垃圾邮件里）</div>`;
+  });
+
+  $('logoutBtn').addEventListener('click', async ()=>{
+    await sb.auth.signOut();
+    window.location.reload();
+  });
+
+  async function init(){
+    const { data:{ session } } = await sb.auth.getSession();
+    if(!session){ show('authView'); return; }
+    currentUser = session.user;
+
+    const { data:profile } = await sb.from('profiles').select('*').eq('id', currentUser.id).maybeSingle();
+    if(!profile){ show('profileView'); return; }
+    currentProfile = profile;
+    enterApp();
+  }
+
+  $('saveProfileBtn').addEventListener('click', async ()=>{
+    const full_name = $('pfName').value.trim();
+    const school = $('pfSchool').value.trim();
+    const major = $('pfMajor').value.trim();
+    if(!full_name){ $('profileMsg').innerHTML = '<div class="auth-msg err">请填姓名</div>'; return; }
+    const { data, error } = await sb.from('profiles').insert([{ id: currentUser.id, full_name, school, major }]).select().single();
+    if(error){ $('profileMsg').innerHTML = `<div class="auth-msg err">${error.message}</div>`; return; }
+    currentProfile = data;
+    enterApp();
+  });
+
+  function show(id){
+    ['authView','profileView','mainView'].forEach(v=> $(v).classList.add('hidden'));
+    $(id).classList.remove('hidden');
+  }
+
+  function enterApp(){
+    show('mainView');
+    $('navName').textContent = currentProfile.full_name;
+    $('navName').classList.remove('hidden');
+    $('logoutBtn').classList.remove('hidden');
+    const badge = $('roleBadge');
+    badge.textContent = currentProfile.role === 'mentor' ? '导师视角' : '学生视角';
+    badge.style.background = currentProfile.role === 'mentor' ? 'var(--purple-soft)' : 'var(--lime-soft)';
+    badge.classList.remove('hidden');
+
+    if(currentProfile.role === 'mentor'){
+      $('mentorView').classList.remove('hidden');
+      loadMentorView();
+    }else{
+      $('studentView').classList.remove('hidden');
+      loadStudentView();
+    }
+  }
+
+  // ---------- Student Kanban ----------
+  async function loadStudentView(){
+    const { data, error } = await sb.from('applications').select('*').eq('student_id', currentUser.id).order('created_at',{ascending:false});
+    if(error){ console.error(error); return; }
+    renderKanban(data || []);
+  }
+
+  function renderKanban(rows){
+    const board = $('kanban');
+    board.innerHTML = '';
+    STAGES.forEach(stage=>{
+      const items = rows.filter(r=>r.stage === stage);
+      const col = document.createElement('div');
+      col.className = 'kcol';
+      col.innerHTML = `
+        <div class="kcol-head"><h3>${stage}</h3><span class="kcol-count">${items.length}</span></div>
+        <div class="kcol-body"></div>
+        ${stage==='投递' ? '<button class="add-card" id="kAddBtn">+ 新增申请</button>' : ''}
+      `;
+      const body = col.querySelector('.kcol-body');
+      items.forEach(r=>{
+        const overdue = r.deadline && new Date(r.deadline) < new Date() && r.stage !== 'Offer' && r.stage !== '被拒';
+        const card = document.createElement('div');
+        card.className = 'kcard';
+        card.innerHTML = `
+          <div class="company">${escapeHtml(r.company)}</div>
+          <div class="position">${escapeHtml(r.position)}</div>
+          <div class="meta">
+            ${r.deadline ? `<span class="tag ${overdue?'overdue':''}">截止 ${r.deadline}</span>` : ''}
+            ${r.next_action ? `<span class="tag">下一步：${escapeHtml(r.next_action)}</span>` : ''}
+          </div>`;
+        card.addEventListener('click', ()=> openAppModal(r));
+        body.appendChild(card);
+      });
+      board.appendChild(col);
+    });
+    const addBtn = document.getElementById('kAddBtn');
+    if(addBtn) addBtn.addEventListener('click', ()=> openAppModal(null));
+  }
+
+  $('addAppBtn').addEventListener('click', ()=> openAppModal(null));
+
+  function openAppModal(row){
+    editingId = row ? row.id : null;
+    $('appModalTitle').textContent = row ? '编辑申请' : '新增申请';
+    $('fCompany').value = row?.company || '';
+    $('fPosition').value = row?.position || '';
+    $('fStage').value = row?.stage || '投递';
+    $('fDeadline').value = row?.deadline || '';
+    $('fNextAction').value = row?.next_action || '';
+    $('fNextDate').value = row?.next_action_date || '';
+    $('fNotes').value = row?.notes || '';
+    $('fDeleteBtn').classList.toggle('hidden', !row);
+    $('appModal').classList.add('open');
+  }
+  $('appModalClose').addEventListener('click', ()=> $('appModal').classList.remove('open'));
+  $('appModal').addEventListener('click', (e)=>{ if(e.target.id==='appModal') $('appModal').classList.remove('open'); });
+
+  $('fSaveBtn').addEventListener('click', async ()=>{
+    const record = {
+      company: $('fCompany').value.trim(),
+      position: $('fPosition').value.trim(),
+      stage: $('fStage').value,
+      deadline: $('fDeadline').value || null,
+      next_action: $('fNextAction').value.trim() || null,
+      next_action_date: $('fNextDate').value || null,
+      notes: $('fNotes').value.trim() || null,
+    };
+    if(!record.company || !record.position){ alert('公司和岗位必填'); return; }
+
+    let error;
+    if(editingId){
+      ({ error } = await sb.from('applications').update(record).eq('id', editingId));
+    }else{
+      record.student_id = currentUser.id;
+      ({ error } = await sb.from('applications').insert([record]));
+    }
+    if(error){ alert('保存失败：' + error.message); return; }
+    $('appModal').classList.remove('open');
+    loadStudentView();
+  });
+
+  $('fDeleteBtn').addEventListener('click', async ()=>{
+    if(!editingId) return;
+    if(!confirm('确定删除这条申请记录吗？')) return;
+    const { error } = await sb.from('applications').delete().eq('id', editingId);
+    if(error){ alert('删除失败：' + error.message); return; }
+    $('appModal').classList.remove('open');
+    loadStudentView();
+  });
+
+  // ---------- Mentor Table ----------
+  let mentorRows = [];
+  async function loadMentorView(){
+    const { data, error } = await sb.from('applications')
+      .select('*, profiles!applications_student_id_fkey(full_name, school)')
+      .order('deadline', { ascending: true });
+    if(error){ console.error(error); return; }
+    mentorRows = data || [];
+
+    const students = [...new Map(mentorRows.map(r=>[r.student_id, r.profiles?.full_name || '未知'])).entries()];
+    const sel = $('filterStudent');
+    sel.innerHTML = '<option value="">全部学生</option>' + students.map(([id,name])=>`<option value="${id}">${escapeHtml(name)}</option>`).join('');
+
+    renderMentorTable();
+  }
+
+  ['filterStudent','filterStage','filterCompany'].forEach(id=>{
+    $(id).addEventListener('input', renderMentorTable);
+    $(id).addEventListener('change', renderMentorTable);
+  });
+
+  function renderMentorTable(){
+    const studentId = $('filterStudent').value;
+    const stage = $('filterStage').value;
+    const company = $('filterCompany').value.trim().toLowerCase();
+
+    const filtered = mentorRows.filter(r=>
+      (!studentId || r.student_id === studentId) &&
+      (!stage || r.stage === stage) &&
+      (!company || r.company.toLowerCase().includes(company))
+    );
+
+    const tbody = $('mentorTableBody');
+    tbody.innerHTML = filtered.map(r=>`
+      <tr data-id="${r.id}">
+        <td>${escapeHtml(r.profiles?.full_name || '—')}</td>
+        <td>${escapeHtml(r.profiles?.school || '—')}</td>
+        <td>${escapeHtml(r.company)}</td>
+        <td>${escapeHtml(r.position)}</td>
+        <td>
+          <select class="m-stage">
+            ${STAGES.map(s=>`<option value="${s}" ${s===r.stage?'selected':''}>${s}</option>`).join('')}
+          </select>
+        </td>
+        <td>${r.deadline || '—'}</td>
+        <td><input type="text" class="m-mentor" value="${escapeAttr(r.mentor_name||'')}"></td>
+        <td><input type="text" class="m-nextaction" value="${escapeAttr(r.next_action||'')}"></td>
+        <td><input type="date" class="m-nextdate" value="${r.next_action_date||''}"></td>
+        <td><textarea class="m-notes">${escapeHtml(r.notes||'')}</textarea></td>
+        <td><button class="btn small m-save">保存</button></td>
+      </tr>
+    `).join('');
+
+    tbody.querySelectorAll('tr').forEach(tr=>{
+      tr.querySelector('.m-save').addEventListener('click', async ()=>{
+        const id = tr.dataset.id;
+        const update = {
+          stage: tr.querySelector('.m-stage').value,
+          mentor_name: tr.querySelector('.m-mentor').value.trim() || null,
+          next_action: tr.querySelector('.m-nextaction').value.trim() || null,
+          next_action_date: tr.querySelector('.m-nextdate').value || null,
+          notes: tr.querySelector('.m-notes').value.trim() || null,
+        };
+        const { error } = await sb.from('applications').update(update).eq('id', id);
+        if(error){ alert('保存失败：' + error.message); return; }
+        const row = mentorRows.find(r=>r.id===id);
+        Object.assign(row, update);
+        tr.querySelector('.m-save').textContent = '已保存 ✓';
+        setTimeout(()=> tr.querySelector('.m-save').textContent = '保存', 1500);
+      });
+    });
+  }
+
+  function escapeHtml(str){
+    return (str||'').toString().replace(/[&<>"']/g, s=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));
+  }
+  function escapeAttr(str){ return escapeHtml(str); }
+
+  init();
+</script>
+
+</body>
+</html>
